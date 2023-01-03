@@ -5,6 +5,10 @@ from django.utils.translation import ugettext_lazy as _
 
 
 class User(AbstractUser):
+    USER_TYPE = (
+                    ('owner', 'owner'),
+                    ('end_user', 'end_user')
+    )
     # WARNING!
     """
     Some officially supported features of Crowdbotics Dashboard depend on the initial
@@ -21,6 +25,9 @@ class User(AbstractUser):
     # First Name and Last Name do not cover name patterns
     # around the globe.
     name = models.CharField(_("Name of User"), blank=True, null=True, max_length=255)
+    phone_number = models.CharField(max_length=16, default='')
+    user_type = models.CharField(max_length=8, choices=USER_TYPE, default='owner')
+    privacy_policy = models.BooleanField(default=False)
 
     def get_absolute_url(self):
         return reverse("users:detail", kwargs={"username": self.username})
