@@ -25,7 +25,8 @@ User = get_user_model()
 
 class SignupViewSet(ModelViewSet):
     serializer_class = SignupSerializer
-    http_method_names = ["post"]
+    http_method_names = ["post", 'patch']
+    queryset = User.objects.all()
 
 
 class LoginViewSet(ViewSet):
