@@ -28,6 +28,7 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=16, default='')
     user_type = models.CharField(max_length=8, choices=USER_TYPE, default='owner')
     privacy_policy = models.BooleanField(default=False)
+    terms_condition = models.BooleanField(default=False)
 
     def get_absolute_url(self):
         return reverse("users:detail", kwargs={"username": self.username})
