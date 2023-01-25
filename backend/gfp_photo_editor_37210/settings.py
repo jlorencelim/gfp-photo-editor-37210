@@ -87,6 +87,7 @@ THIRD_PARTY_APPS = [
     'django_extensions',
     'drf_yasg',
     'storages',
+    'corsheaders',
 ]
 MODULES_APPS = get_modules()
 
@@ -265,7 +266,7 @@ else:
     logging.warning("You should setup `SENDGRID_USERNAME` and `SENDGRID_PASSWORD` env vars to send emails.")
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-# GCP config 
+# GCP config
 def google_service_account_config():
     # base64 encoded service_account.json file
     service_account_config = env.str("GS_CREDENTIALS", "")
@@ -286,3 +287,9 @@ if GS_BUCKET_NAME:
 
 
 FRONTEND_URL=env.str('FRONTEND_URL', default='')
+
+# Allow Frontend To Access Backend
+CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = ['*']
+CSRF_TRUSTED_ORIGINS = ['*']
