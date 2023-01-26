@@ -14,11 +14,7 @@ import os
 import io
 import environ
 import logging
-import json
-import base64
-import binascii
 import google.auth
-from google.oauth2 import service_account
 from google.cloud import secretmanager
 from google.auth.exceptions import DefaultCredentialsError
 from google.api_core.exceptions import PermissionDenied
@@ -45,19 +41,17 @@ try:
 except (DefaultCredentialsError, PermissionDenied):
     pass
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env.str("SECRET_KEY")
+SECRET_KEY = env.str("SECRET_KEY", "")
 
 ALLOWED_HOSTS = env.list("HOST", default=["*"])
 SITE_ID = 1
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("SECURE_REDIRECT", default=False)
-
 
 # Application definition
 
@@ -94,6 +88,7 @@ MODULES_APPS = get_modules()
 INSTALLED_APPS += LOCAL_APPS + THIRD_PARTY_APPS + MODULES_APPS
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -123,7 +118,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'gfp_photo_editor_37210.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
@@ -138,7 +132,6 @@ if env.str("DATABASE_URL", default=None):
     DATABASES = {
         'default': env.db()
     }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
@@ -158,7 +151,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/2.2/topics/i18n/
 
@@ -167,7 +159,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/2.2/howto/static-files/
@@ -181,21 +172,10 @@ AUTHENTICATION_BACKENDS = (
     'allauth.account.auth_backends.AuthenticationBackend'
 )
 
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework.authentication.BasicAuthentication",
-        "rest_framework.authentication.TokenAuthentication",
-    ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 20
-}
-
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static'), os.path.join(BASE_DIR, 'web_build/static')]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-MEDIA_URL = '/mediafiles/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
 # allauth / users
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_AUTHENTICATION_METHOD = 'email'
@@ -220,6 +200,15 @@ REST_AUTH_REGISTER_SERIALIZERS = {
     "REGISTER_SERIALIZER": "home.api.v1.serializers.SignupSerializer",
 }
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework.authentication.BasicAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
+    'PAGE_SIZE': 20
+}
+
 # Custom user model
 AUTH_USER_MODEL = "users.User"
 
@@ -230,6 +219,8 @@ DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL', default='')
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
+# Firebase cloud messaging api key
+FIREBASE_CLOUD_MESSAGING_API = env.str("FIREBASE_CLOUD_MESSAGING_API", "")
 
 # AWS S3 config
 AWS_ACCESS_KEY_ID = env.str("AWS_ACCESS_KEY_ID", "")
@@ -238,10 +229,10 @@ AWS_STORAGE_BUCKET_NAME = env.str("AWS_STORAGE_BUCKET_NAME", "")
 AWS_STORAGE_REGION = env.str("AWS_STORAGE_REGION", "")
 
 USE_S3 = (
-    AWS_ACCESS_KEY_ID and
-    AWS_SECRET_ACCESS_KEY and
-    AWS_STORAGE_BUCKET_NAME and
-    AWS_STORAGE_REGION
+        AWS_ACCESS_KEY_ID and
+        AWS_SECRET_ACCESS_KEY and
+        AWS_STORAGE_BUCKET_NAME and
+        AWS_STORAGE_REGION
 )
 
 if USE_S3:
@@ -250,9 +241,15 @@ if USE_S3:
     AWS_DEFAULT_ACL = env.str("AWS_DEFAULT_ACL", "public-read")
     AWS_MEDIA_LOCATION = env.str("AWS_MEDIA_LOCATION", "media")
     AWS_AUTO_CREATE_BUCKET = env.bool("AWS_AUTO_CREATE_BUCKET", True)
-    DEFAULT_FILE_STORAGE = env.str(
-        "DEFAULT_FILE_STORAGE", "home.storage_backends.MediaStorage"
-    )
+    DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+    MEDIA_URL = '/mediafiles/'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    AWS_QUERYSTRING_AUTH = False
+
+else:
+    MEDIA_URL = '/mediafiles/'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'mediafiles')
 
 # Swagger settings for api docs
 SWAGGER_SETTINGS = {
@@ -261,24 +258,13 @@ SWAGGER_SETTINGS = {
 
 if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
 else:
     # output email to console instead of sending
     logging.warning("You should setup `SENDGRID_USERNAME` and `SENDGRID_PASSWORD` env vars to send emails.")
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # GCP config
-def google_service_account_config():
-    # base64 encoded service_account.json file
-    service_account_config = env.str("GS_CREDENTIALS", "")
-    if not service_account_config:
-        return {}
-    try:
-        return json.loads(base64.b64decode(service_account_config))
-    except (binascii.Error, ValueError):
-        return {}
-GOOGLE_SERVICE_ACCOUNT_CONFIG = google_service_account_config()
-if GOOGLE_SERVICE_ACCOUNT_CONFIG:
-    GS_CREDENTIALS = service_account.Credentials.from_service_account_info(GOOGLE_SERVICE_ACCOUNT_CONFIG)
 GS_BUCKET_NAME = env.str("GS_BUCKET_NAME", "")
 if GS_BUCKET_NAME:
     DEFAULT_FILE_STORAGE = "storages.backends.gcloud.GoogleCloudStorage"
@@ -286,10 +272,37 @@ if GS_BUCKET_NAME:
     GS_DEFAULT_ACL = "publicRead"
 
 
-FRONTEND_URL=env.str('FRONTEND_URL', default='')
+# CELERY STUFF
+CELERY_BROKER_URL = env.str("REDIS_URL", "redis://redis:6379")
+CELERY_RESULT_BACKEND = env.str("REDIS_URL", "redis://redis:6379")
+# CELERY_BROKER_URL = env.str("REDIS_URL", "")
+# CELERY_RESULT_BACKEND = env.str("REDIS_URL", "")
+# CELERY_ACCEPT_CONTENT = ['application/json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+SERVER_DOMAIN = env.str("SERVER_DOMAIN", "")
 
 # Allow Frontend To Access Backend
 CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = ['*']
 CSRF_TRUSTED_ORIGINS = ['*']
+
+FRONTEND_URL=env.str('FRONTEND_URL', default='')
+
+
+FCM_DJANGO_SETTINGS = {
+    "FCM_SERVER_KEY": env.str("FCM_SERVER_KEY", "")
+}
+
+APNS_AUTH_KEY_PATH = BASE_DIR + '/' + 'shrill_recipe_34516/' + env.str("AUTH_KEY_NAME", "")
+
+PUSH_NOTIFICATIONS_SETTINGS = {
+    "FCM_API_KEY":  env.str("FCM_SERVER_KEY", ""),
+    "APNS_AUTH_KEY_PATH": APNS_AUTH_KEY_PATH,
+    "APNS_AUTH_KEY_ID": env.str("APNS_AUTH_KEY_ID", ""),
+    "APNS_TEAM_ID": env.str("APNS_TEAM_ID", ""),
+    "APNS_TOPIC": env.str("APNS_TOPIC", ""),
+    "APNS_USE_SANDBOX": env.bool("APNS_USE_SANDBOX", default=False),
+    "UPDATE_ON_DUPLICATE_REG_ID": True
+}
