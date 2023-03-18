@@ -21,6 +21,8 @@ from allauth.account.views import confirm_email
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("", include("home.urls")),
@@ -34,6 +36,8 @@ urlpatterns = [
     path("rest-auth/registration/account-confirm-email/<str:key>/", confirm_email),
     path("rest-auth/registration/", include("rest_auth.registration.urls")),
 ]
+
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 admin.site.site_header = "GFP Photo editor"
 admin.site.site_title = "GFP Photo editor Admin Portal"
